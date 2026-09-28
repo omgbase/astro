@@ -1,0 +1,123 @@
+# `@omgbase/astro`
+
+Use an [omgbase](https://github.com/omgbase/omgbase) repository as the CMS for an [Astro](https://astro.build) static site.
+
+The package provides:
+
+- **`omgLoader`** — an Astro Content Layer loader driven by an **OQX** query
+- **Local transport** — embedded `@omgbase/core`
+- **Remote transport** — Streamable HTTP MCP (`query` + `docs_get_many`), same as `omg … --server <url>`
+- **Dev live-reload** — in `astro dev`, local vaults use Vite's FS watcher; remote polls MCP `changes_since`. Both update Astro's content data store so the normal HMR path fires — no custom integration required
+- **`createMcpHttpServer`** — optional local Streamable HTTP MCP server for demos/CI
+
+## Install
+
+```bash
+pnpm add @omgbase/astro @omgbase/core
+```
+
+Peer dependency: Astro 5+.
+
+## Local loader
+
+```ts
+// src/content.config.ts
+import { defineCollection, z } from "astro:content";
+import { omgLoader } from "@omgbase/astro";
+
+const posts = defineCollection({
+  loader: omgLoader({
+    workspace: "../content", // directory containing `.omgbase/`
+    repo: "content",
+    query: `from docs where $path.startsWith("posts/") && status == "published"`,
+    slug: ({ path }) => path.replace(/^posts\//, "").replace(/\.md$/i, ""),
+  }),
+  schema: z.object({
+    title: z.string(),
+    status: z.string(),
+    path: z.string(),
+    docId: z.string(),
+    contentHash: z.string().nullable(),
+    slug: z.string(),
+  }),
+});
+
+export const collections = { posts };
+```
+
+Entry **id** = omg document id. **`data.slug`** is for routing (default: path without `.md`).
+
+## Remote loader (Streamable HTTP MCP)
+
+Point `url` at the same endpoint you’d pass to `omg query --server <url>` — including a stdio-mcp-to-http wrapper, secret path prefix, etc. Custom headers match CLI `-H`:
+
+```ts
+omgLoader({
+  url: process.env.OMG_URL!,                    // e.g. https://host/k/<secret>/mcp
+  headers: { "X-Env": "prod" },                 // map form
+  headerLines: ["X-Request-Id: build-42"],      // CLI -H "Name: value" form
+  token: process.env.OMG_TOKEN,                 // → Authorization: Bearer …
+  repo: "content",
+  query: `from docs where status == "published"`,
+});
+```
+
+Under the hood this uses `@omgbase/sync`’s `connectHttpEngine` (same client as the CLI).
+
+### Live reload in `astro dev`
+
+Enabled by default whenever Astro passes a `watcher` into the loader:
+
+| Transport | Mechanism |
+| --- | --- |
+| Local | Vite FS watch on the vault root (same hook as `glob()`) |
+| Remote | Poll MCP `changes_since` (default every 2s) |
+
+On change, the loader re-queries/hydrates into the content data store. Astro already watches that store file and hot-reloads pages — we don’t invent a second HMR channel.
+
+```ts
+omgLoader({
+  url: process.env.OMG_URL!,
+  query: `from docs where status == "published"`,
+  watch: { intervalMs: 1500 }, // or `watch: false` to disable
+});
+```
+
+### Demo MCP HTTP server
+
+If you don’t already have an HTTP MCP front-end, `createMcpHttpServer` wraps a local workspace:
+
+```ts
+import { createMcpHttpServer } from "@omgbase/astro/server";
+
+const mcp = await createMcpHttpServer({
+  workspace: "./content",
+  repo: "content",
+  token: "secret",
+  port: 8787,
+});
+// mcp.url → http://127.0.0.1:8787/mcp
+```
+
+Prefer your real wrapper/hosted endpoint for production builds.
+
+## Identity & caching
+
+- Astro entry **`id`** = omg document id (`d_…`)
+- **`data.slug`** = routing key (default: path with `.md` stripped; override with `slug`)
+- Digests use omg `contentHash` when available so unchanged docs skip rewrite on reload
+
+## Example
+
+See [`examples/blog`](../../examples/blog):
+
+```bash
+pnpm install
+pnpm --filter @omgbase/astro build
+pnpm --filter @omgbase/example-blog dev:local
+# or (demo MCP HTTP server)
+pnpm --filter @omgbase/example-blog dev:remote
+# or point at your wrapper:
+OMG_URL=https://host/k/secret/mcp OMG_TOKEN=… pnpm --filter @omgbase/example-blog build:local
+# with OMG_TRANSPORT=remote and OMG_URL set in the environment
+```

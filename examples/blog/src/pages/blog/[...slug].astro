@@ -1,0 +1,90 @@
+---
+import { getCollection, render } from "astro:content";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("posts");
+  return posts.map((post) => ({
+    params: { slug: post.data.slug },
+    props: { post },
+  }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{post.data.title}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1a1a1a;
+        --muted: #5c5c5c;
+        --line: #e6e2da;
+        --paper: #f7f4ef;
+        --accent: #0b5fff;
+      }
+      body {
+        margin: 0;
+        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        background: linear-gradient(180deg, #fbfaf7, var(--paper));
+        color: var(--ink);
+      }
+      main {
+        width: min(42rem, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 3rem 0 5rem;
+      }
+      a.back {
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        font-size: 0.85rem;
+        color: var(--muted);
+        text-decoration: none;
+      }
+      a.back:hover { color: var(--accent); }
+      h1 {
+        font-size: clamp(2rem, 5vw, 3rem);
+        letter-spacing: -0.03em;
+        margin: 1.5rem 0 0.5rem;
+      }
+      .meta {
+        color: var(--muted);
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        font-size: 0.9rem;
+        margin-bottom: 2rem;
+      }
+      article :global(p),
+      article :global(li) {
+        line-height: 1.65;
+        font-size: 1.1rem;
+      }
+      article :global(pre) {
+        overflow-x: auto;
+        padding: 1rem;
+        background: #171717;
+        color: #f5f5f5;
+        border-radius: 0.4rem;
+      }
+      article :global(code) {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.92em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="/">← All posts</a>
+      <h1>{post.data.title}</h1>
+      <p class="meta">
+        {post.data.published ? String(post.data.published) : "undated"}
+        {" · "}
+        {post.data.path}
+      </p>
+      <article>
+        <Content />
+      </article>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "@omgbase/example-blog",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup:content": "node ./scripts/setup-content.mjs",
+    "dev": "pnpm setup:content && astro dev",
+    "dev:local": "OMG_TRANSPORT=local pnpm dev",
+    "dev:remote": "node ./scripts/dev-remote.mjs",
+    "build": "pnpm setup:content && astro build",
+    "build:local": "OMG_TRANSPORT=local pnpm build",
+    "build:remote": "node ./scripts/build-remote.mjs",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@omgbase/astro": "workspace:*",
+    "@omgbase/core": "^0.5.0",
+    "astro": "^7.3.5"
+  }
+}
