@@ -47,14 +47,43 @@ export interface MappedEntry {
 }
 
 /**
+ * Fold lean OQX hit projections into entry data (e.g. `$updated_at` from
+ * `select …`). Intrinsic `id` / `path` stay on the hit; everything else merges
+ * under the hydrated frontmatter so authored fields win on collision.
+ * Also aliases `$updated_at` → `updatedAt` and `$title` → `title` when absent.
+ */
+export function mergeHitProjections(
+  data: Record<string, unknown>,
+  hit: { id: string; path: string; [key: string]: unknown },
+): Record<string, unknown> {
+  const extras: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(hit)) {
+    if (key === "id" || key === "path") continue;
+    extras[key] = value;
+  }
+  if (extras.$updated_at !== undefined && data.updatedAt === undefined) {
+    extras.updatedAt = extras.$updated_at;
+  }
+  if (typeof extras.$title === "string" && data.title === undefined) {
+    extras.title = extras.$title;
+  }
+  return { ...extras, ...data };
+}
+
+/**
  * Map a hydrated omg doc to Astro entry fields.
  * Frontmatter keys are spread into `data`; intrinsic keys are always set.
+ * When frontmatter has no `title`, computed `$title` is used.
  */
 export function mapDoc(
   doc: HydratedDoc,
   slugFn: (ctx: SlugContext) => string = defaultSlug,
 ): MappedEntry {
   const frontmatter = { ...(doc.properties.frontmatter ?? {}) };
+  const computed = doc.properties.computed ?? {};
+  if (frontmatter.title === undefined && typeof computed.$title === "string") {
+    frontmatter.title = computed.$title;
+  }
   const slug = slugFn({
     path: doc.path,
     docId: doc.id,

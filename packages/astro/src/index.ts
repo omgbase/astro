@@ -19,7 +19,7 @@ export type { RemoteTransportOptions } from "./remote.js";
 
 export type { WatchOption } from "./watch.js";
 
-export { defaultSlug, stripFrontmatter, mapDoc, contentHashOf } from "./map.js";
+export { defaultSlug, stripFrontmatter, mapDoc, mergeHitProjections, contentHashOf } from "./map.js";
 export type { SlugContext, MappedEntry } from "./map.js";
 export type { OmgEntryIntrinsics } from "./schema.js";
 

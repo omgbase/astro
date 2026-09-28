@@ -1,7 +1,7 @@
 import type { LoaderContext } from "astro/loaders";
 import type { Transport } from "./transport.js";
 import type { SlugContext } from "./map.js";
-import { mapDoc } from "./map.js";
+import { mapDoc, mergeHitProjections } from "./map.js";
 import {
   allowedDstsFor,
   buildHrefIndex,
@@ -114,6 +114,7 @@ export async function syncEntries(
     seen.add(doc.id);
 
     const mapped = mapDoc(doc, opts.slug);
+    mapped.data = mergeHitProjections(mapped.data, hit);
     let body = mapped.body;
     if (opts.href !== false && hrefIndex.byDocId.size > 0) {
       const allowed = edges.length
