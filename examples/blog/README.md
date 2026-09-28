@@ -32,10 +32,27 @@ OMG_URL=https://host/k/secret/mcp OMG_TOKEN=… OMG_HEADER='X-Foo: bar' \
    ```
 
 4. Local transport uses `@omgbase/core`; remote uses MCP tools `query` + `docs_get_many` over Streamable HTTP (same as CLI `--server`).
-5. Markdown links between hydrated posts (e.g. `./graph-shaped.md`) are rewritten to site URLs via `href: ({ slug }) => \`/blog/${slug}/\``.
+5. **Identity-aware interlinks** — vault Markdown like `./graph-shaped.md#why-identity` becomes `/blog/graph-shaped/#why-identity` for docs in this load (see below).
 6. Astro pages call `getCollection("posts")` / `render()` as usual.
 
 Drafts (`status: draft`) stay in the vault but never enter the collection.
+
+## See the link rewrite
+
+The exciting bit: write normal omgbase links in the vault; the loader maps them onto site routes using omg document identity.
+
+In `content/posts/hello.md` you’ll find:
+
+| Authored in the vault | After build (published peers) |
+| --- | --- |
+| `[…](./graph-shaped.md#why-identity)` | `/blog/graph-shaped/#why-identity` |
+| `[…](/posts/graph-shaped.md)` | `/blog/graph-shaped/` |
+| `[[posts/graph-shaped]]` | body becomes `[[/blog/graph-shaped/]]` (wikilink HTML still needs a renderer) |
+| `[…](https://github.com/omgbase/omgbase)` | unchanged (external) |
+| `[…](./draft.md)` | unchanged (draft not in this load) |
+| A `./graph-shaped.md` link inside a fence | unchanged (code) |
+
+`href: ({ slug }) => \`/blog/${slug}/\`` in `content.config.ts` is the only site-specific piece. After `pnpm build:local`, open `dist/blog/hello/index.html` and confirm the peer `<a href="…">` values — that’s the demo.
 
 ## Live reload
 

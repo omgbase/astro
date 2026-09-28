@@ -85,7 +85,9 @@ const posts = (await getCollection("posts")).sort((a, b) =>
       <p class="brand">omgbase × Astro</p>
       <h1>Example blog</h1>
       <p class="lede">
-        Posts are selected from an omgbase vault with OQX and rendered as a static Astro site.
+        Posts are selected from an omgbase vault with OQX. Vault-relative Markdown
+        links between published docs become site routes at build time — open
+        <a href="/blog/hello/">Hello</a> and compare source vs HTML.
       </p>
       <ul>
         {posts.map((post) => (
