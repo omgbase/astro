@@ -12,8 +12,10 @@ import {
 import type {
   ChangesPage,
   ChangesSinceOptions,
+  DocOutEdge,
   HydrateOptions,
   HydratedDoc,
+  OutEdgesOptions,
   QueryHit,
   QueryOptions,
   Transport,
@@ -128,6 +130,34 @@ export class LocalTransport implements Transport {
       const read = docsRead(this.ws.store, id);
       if (!read) continue;
       out.push(toHydrated(read));
+    }
+    return out;
+  }
+
+  async outEdges(opts: OutEdgesOptions): Promise<DocOutEdge[]> {
+    this.ensureFresh();
+    if (opts.ids.length === 0) return [];
+    const wanted = new Set(opts.ids);
+    const result = oqxRun(
+      this.ws.store,
+      this.repo.repoId,
+      `$src, $dst, $dst_path from edges where dst_kind == "document"`,
+    );
+    const out: DocOutEdge[] = [];
+    const seen = new Set<string>();
+    for (const h of result.hits) {
+      const src = typeof h.$src === "string" ? h.$src : null;
+      const dst = typeof h.$dst === "string" ? h.$dst : null;
+      if (!src || !dst || !wanted.has(src)) continue;
+      if (dst.startsWith("phantom:")) continue;
+      const key = `${src}\0${dst}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        src,
+        dst,
+        dstPath: typeof h.$dst_path === "string" ? h.$dst_path : null,
+      });
     }
     return out;
   }

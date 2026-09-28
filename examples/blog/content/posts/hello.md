@@ -14,3 +14,5 @@ from docs where $path.startsWith("posts/") && status == "published"
 ```
 
 Astro never copies these files into `src/content` — the Content Loader hydrates them at build time.
+
+Related: [Graph-shaped publishing](./graph-shaped.md).

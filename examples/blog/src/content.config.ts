@@ -10,6 +10,7 @@ const shared = {
   repo: "content",
   query: `from docs where $path.startsWith("posts/") && status == "published"`,
   slug: ({ path }: { path: string }) => path.replace(/^posts\//, "").replace(/\.md$/i, ""),
+  href: ({ slug }: { slug: string }) => `/blog/${slug}/`,
 };
 
 function remoteHeaders(): { headers?: Record<string, string>; headerLines?: string[] } {

@@ -31,6 +31,7 @@ const posts = defineCollection({
     repo: "content",
     query: `from docs where $path.startsWith("posts/") && status == "published"`,
     slug: ({ path }) => path.replace(/^posts\//, "").replace(/\.md$/i, ""),
+    href: ({ slug }) => `/blog/${slug}/`,
   }),
   schema: z.object({
     title: z.string(),
@@ -46,6 +47,23 @@ export const collections = { posts };
 ```
 
 Entry **id** = omg document id. **`data.slug`** is for routing (default: path without `.md`).
+
+### Inter-doc links
+
+When the loader hydrates a set of docs, markdown bodies are rewritten so links that resolve to another hydrated doc use that doc’s site URL:
+
+```ts
+omgLoader({
+  workspace: "../content",
+  query: `from docs where status == "published"`,
+  slug: ({ path }) => path.replace(/^posts\//, "").replace(/\.md$/i, ""),
+  href: ({ slug }) => `/blog/${slug}/`, // match your routes
+});
+```
+
+Resolution is identity-aware: live omg out-edges (`$dst`) gate rewrites when available, and authored destinations are matched with the same path rules as the engine (`./` / `../`, root-relative, `.md` aliases). Fragments (`#sec`) are preserved. External URLs, pure `#anchors`, code spans/fences, and destinations that aren’t in this load are left alone. Set `href: false` to disable rewriting.
+
+Query projections that return link URL *values* as columns are never rewritten — only markdown bodies going through `renderMarkdown`.
 
 ## Remote loader (Streamable HTTP MCP)
 
@@ -105,7 +123,8 @@ Prefer your real wrapper/hosted endpoint for production builds.
 
 - Astro entry **`id`** = omg document id (`d_…`)
 - **`data.slug`** = routing key (default: path with `.md` stripped; override with `slug`)
-- Digests use omg `contentHash` when available so unchanged docs skip rewrite on reload
+- **`href`** = site URL used when rewriting markdown links between hydrated docs (default `/${slug}`; override to match routes)
+- Digests use omg `contentHash` (plus an href-map fingerprint when rewriting) so unchanged docs skip rewrite on reload
 
 ## Example
 

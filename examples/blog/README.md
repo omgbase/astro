@@ -32,7 +32,8 @@ OMG_URL=https://host/k/secret/mcp OMG_TOKEN=… OMG_HEADER='X-Foo: bar' \
    ```
 
 4. Local transport uses `@omgbase/core`; remote uses MCP tools `query` + `docs_get_many` over Streamable HTTP (same as CLI `--server`).
-5. Astro pages call `getCollection("posts")` / `render()` as usual.
+5. Markdown links between hydrated posts (e.g. `./graph-shaped.md`) are rewritten to site URLs via `href: ({ slug }) => \`/blog/${slug}/\``.
+6. Astro pages call `getCollection("posts")` / `render()` as usual.
 
 Drafts (`status: draft`) stay in the vault but never enter the collection.
 

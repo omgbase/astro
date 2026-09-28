@@ -64,10 +64,50 @@ describe("syncEntries", () => {
     const { seen, written } = await syncEntries(ctx, transport, {
       query: "from docs",
       slug: ({ path }) => path.replace(/\.md$/, ""),
+      href: ({ slug }) => `/blog/${slug}/`,
     });
     expect(seen).toBe(1);
     expect(written).toBe(1);
     expect(ctx.store.get("d_1")?.data).toMatchObject({ title: "A", slug: "posts/a" });
+  });
+
+  it("rewrites markdown links to other hydrated docs", async () => {
+    const transport: Transport = {
+      kind: "remote",
+      query: vi.fn(async () => [
+        { id: "d_a", path: "posts/a.md" },
+        { id: "d_b", path: "posts/b.md" },
+      ]),
+      hydrate: vi.fn(async () => [
+        {
+          id: "d_a",
+          path: "posts/a.md",
+          properties: { frontmatter: { title: "A" } },
+          body: "See [B](./b.md#x) and [ext](https://x.test).",
+          contentHash: "a",
+          rev: null,
+        },
+        {
+          id: "d_b",
+          path: "posts/b.md",
+          properties: { frontmatter: { title: "B" } },
+          body: "Target",
+          contentHash: "b",
+          rev: null,
+        },
+      ]),
+      outEdges: vi.fn(async () => [
+        { src: "d_a", dst: "d_b", dstPath: "posts/b.md" },
+      ]),
+    };
+    const ctx = mockContext();
+    await syncEntries(ctx, transport, {
+      query: "from docs",
+      slug: ({ path }) => path.replace(/^posts\//, "").replace(/\.md$/, ""),
+      href: ({ slug }) => `/blog/${slug}/`,
+    });
+    expect(ctx.store.get("d_a")?.body).toBe("See [B](/blog/b/#x) and [ext](https://x.test).");
+    expect(transport.outEdges).toHaveBeenCalled();
   });
 });
 

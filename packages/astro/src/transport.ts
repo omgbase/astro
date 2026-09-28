@@ -44,6 +44,19 @@ export interface ChangesSinceOptions {
   repo?: string;
 }
 
+/** Live document out-edge used for identity-gated markdown link rewriting. */
+export interface DocOutEdge {
+  src: string;
+  dst: string;
+  dstPath: string | null;
+}
+
+export interface OutEdgesOptions {
+  /** Source doc ids to collect out-edges for. */
+  ids: string[];
+  repo?: string;
+}
+
 /**
  * Transport seam: local `@omgbase/core` or remote Streamable HTTP MCP.
  * Both paths share query → hydrate; optional `changesSince` enables remote watch.
@@ -52,6 +65,11 @@ export interface Transport {
   readonly kind: "local" | "remote";
   query(opts: QueryOptions): Promise<QueryHit[]>;
   hydrate(opts: HydrateOptions): Promise<HydratedDoc[]>;
+  /**
+   * Live out-edges from the given docs to document destinations (`$dst` / `$dst_path`).
+   * Used to gate markdown link rewrites to destinations omg already resolved.
+   */
+  outEdges?(opts: OutEdgesOptions): Promise<DocOutEdge[]>;
   /** Optional change feed for remote (and local) live reload. */
   changesSince?(opts?: ChangesSinceOptions): Promise<ChangesPage>;
   /** Local filesystem root to watch in `astro dev`, when available. */

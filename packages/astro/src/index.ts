@@ -6,7 +6,7 @@ export type {
   OmgLoaderRemoteOptions,
 } from "./loader.js";
 
-export type { Transport, QueryHit, HydratedDoc, QueryOptions, HydrateOptions } from "./transport.js";
+export type { Transport, QueryHit, HydratedDoc, QueryOptions, HydrateOptions, DocOutEdge } from "./transport.js";
 export { createLocalTransport, LocalTransport } from "./local.js";
 export type { LocalTransportOptions } from "./local.js";
 export {
@@ -22,6 +22,17 @@ export type { WatchOption } from "./watch.js";
 export { defaultSlug, stripFrontmatter, mapDoc, contentHashOf } from "./map.js";
 export type { SlugContext, MappedEntry } from "./map.js";
 export type { OmgEntryIntrinsics } from "./schema.js";
+
+export {
+  defaultHref,
+  buildHrefIndex,
+  rewriteMarkdownLinks,
+  resolveLinkHref,
+  canonicalLinkPath,
+  splitDestination,
+  docDirOf,
+} from "./links.js";
+export type { HrefContext, HrefEntry, HrefIndex, OutEdge } from "./links.js";
 
 export {
   createMcpHttpServer,

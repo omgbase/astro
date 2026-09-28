@@ -2,8 +2,10 @@ import { connectHttpEngine, type McpEngineClient } from "@omgbase/sync";
 import type {
   ChangesPage,
   ChangesSinceOptions,
+  DocOutEdge,
   HydrateOptions,
   HydratedDoc,
+  OutEdgesOptions,
   QueryHit,
   QueryOptions,
   Transport,
@@ -143,6 +145,32 @@ export class RemoteTransport implements Transport {
           rev: item.rev,
         });
       }
+    }
+    return out;
+  }
+
+  async outEdges(opts: OutEdgesOptions): Promise<DocOutEdge[]> {
+    if (opts.ids.length === 0) return [];
+    const wanted = new Set(opts.ids);
+    const hits = await this.query({
+      query: `$src, $dst, $dst_path from edges where dst_kind == "document"`,
+      ...(opts.repo !== undefined ? { repo: opts.repo } : {}),
+    });
+    const out: DocOutEdge[] = [];
+    const seen = new Set<string>();
+    for (const h of hits) {
+      const src = typeof h.$src === "string" ? h.$src : null;
+      const dst = typeof h.$dst === "string" ? h.$dst : null;
+      if (!src || !dst || !wanted.has(src)) continue;
+      if (dst.startsWith("phantom:")) continue;
+      const key = `${src}\0${dst}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        src,
+        dst,
+        dstPath: typeof h.$dst_path === "string" ? h.$dst_path : null,
+      });
     }
     return out;
   }

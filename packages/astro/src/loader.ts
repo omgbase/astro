@@ -3,6 +3,7 @@ import type { Transport } from "./transport.js";
 import { createLocalTransport, type LocalTransportOptions } from "./local.js";
 import { createRemoteTransport, type RemoteTransportOptions } from "./remote.js";
 import { defaultSlug, type SlugContext } from "./map.js";
+import { defaultHref, type HrefContext } from "./links.js";
 import { startWatch, stopWatch, syncEntries, type WatchOption } from "./watch.js";
 
 export interface OmgLoaderBaseOptions {
@@ -14,6 +15,14 @@ export interface OmgLoaderBaseOptions {
   repo?: string;
   /** Override slug generation. Default: path with `.md` stripped. */
   slug?: (ctx: SlugContext) => string;
+  /**
+   * Site URL for a hydrated doc (used to rewrite markdown links that resolve to
+   * other docs in this load). Default: `/${slug}`. Match your routes, e.g.
+   * `({ slug }) => `/blog/${slug}/``.
+   *
+   * Set `href: false` to leave authored destinations unchanged.
+   */
+  href?: false | ((ctx: HrefContext) => string);
   /**
    * Live-reload in `astro dev` (default true when Astro provides a watcher).
    * Local: Vite FS watch on the vault. Remote: poll MCP `changes_since`.
@@ -86,9 +95,13 @@ function resolveTransport(opts: OmgLoaderOptions): Transport {
  * through Astro's normal content-store → HMR path.
  *
  * Entry `id` is the omg document id. `data.slug` is derived from path (overridable).
+ * Markdown bodies are rewritten so links to other hydrated docs use each doc's
+ * site `href` (identity via omg out-edges ∩ path resolution).
  */
 export function omgLoader(opts: OmgLoaderOptions): Loader {
   const slugFn = opts.slug ?? defaultSlug;
+  const hrefFn: false | ((ctx: HrefContext) => string) =
+    opts.href === false ? false : (opts.href ?? defaultHref);
   const watchOpt: WatchOption = opts.watch ?? true;
 
   return {
@@ -102,6 +115,7 @@ export function omgLoader(opts: OmgLoaderOptions): Loader {
         ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
         ...(opts.repo !== undefined ? { repo: opts.repo } : {}),
         slug: slugFn,
+        href: hrefFn,
       };
 
       try {

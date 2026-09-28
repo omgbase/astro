@@ -2,6 +2,14 @@ import type { LoaderContext } from "astro/loaders";
 import type { Transport } from "./transport.js";
 import type { SlugContext } from "./map.js";
 import { mapDoc } from "./map.js";
+import {
+  allowedDstsFor,
+  buildHrefIndex,
+  hrefIndexFingerprint,
+  rewriteMarkdownLinks,
+  type HrefContext,
+  type OutEdge,
+} from "./links.js";
 
 const CURSOR_META = "omg:changes-cursor";
 const DEFAULT_POLL_MS = 2000;
@@ -35,6 +43,7 @@ export async function syncEntries(
     limit?: number;
     repo?: string;
     slug: (ctx: SlugContext) => string;
+    href: false | ((ctx: HrefContext) => string);
   },
 ): Promise<{ seen: number; written: number }> {
   const { store, logger, parseData, renderMarkdown, generateDigest } = context;
@@ -57,6 +66,45 @@ export async function syncEntries(
   const seen = new Set<string>();
   let written = 0;
 
+  // Identity → site URL for every hydrated doc in this collection.
+  let hrefIndex = buildHrefIndex([]);
+  let edges: OutEdge[] = [];
+  let hrefFp = "";
+  if (opts.href !== false && docs.length > 0) {
+    const hrefOf = opts.href;
+    const entries = docs.map((doc) => {
+      const slug = opts.slug({
+        path: doc.path,
+        docId: doc.id,
+        properties: doc.properties,
+      });
+      const href = hrefOf({
+        path: doc.path,
+        docId: doc.id,
+        slug,
+        properties: doc.properties,
+      });
+      return { docId: doc.id, path: doc.path, href };
+    });
+    hrefIndex = buildHrefIndex(entries);
+    hrefFp = hrefIndexFingerprint(hrefIndex);
+
+    if (transport.outEdges) {
+      try {
+        edges = await transport.outEdges({
+          ids: docs.map((d) => d.id),
+          ...(opts.repo !== undefined ? { repo: opts.repo } : {}),
+        });
+      } catch (err) {
+        logger.warn(
+          `omgbase out-edges unavailable; link rewrite uses path resolution only: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+  }
+
   for (const hit of hits) {
     const doc = byId.get(hit.id);
     if (!doc) {
@@ -66,13 +114,29 @@ export async function syncEntries(
     seen.add(doc.id);
 
     const mapped = mapDoc(doc, opts.slug);
-    const digest = mapped.digest || generateDigest(mapped.body);
+    let body = mapped.body;
+    if (opts.href !== false && hrefIndex.byDocId.size > 0) {
+      const allowed = edges.length
+        ? allowedDstsFor(doc.id, edges, hrefIndex)
+        : undefined;
+      // Prefer edge-gated rewrite when we have live out-edges; if this doc has
+      // none into the collection, still allow path resolution into hydrated docs.
+      const gate = allowed && allowed.size > 0 ? allowed : undefined;
+      body = rewriteMarkdownLinks(body, {
+        srcPath: doc.path,
+        hrefIndex,
+        ...(gate ? { allowedDstIds: gate } : {}),
+      });
+    }
+
+    const baseDigest = mapped.digest || generateDigest(mapped.body);
+    const digest = hrefFp ? `${baseDigest}|href:${hrefFp}` : baseDigest;
     const existing = store.get(doc.id);
     if (existing?.digest === digest) continue;
 
     const data = await parseData({ id: doc.id, data: mapped.data });
-    const rendered = await renderMarkdown(mapped.body);
-    store.set({ id: doc.id, data, body: mapped.body, digest, rendered });
+    const rendered = await renderMarkdown(body);
+    store.set({ id: doc.id, data, body, digest, rendered });
     written += 1;
   }
 
@@ -101,6 +165,7 @@ export async function startWatch(
     limit?: number;
     repo?: string;
     slug: (ctx: SlugContext) => string;
+    href: false | ((ctx: HrefContext) => string);
     watch: WatchOption;
   },
 ): Promise<void> {

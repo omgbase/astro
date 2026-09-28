@@ -37,7 +37,12 @@ describe("local + remote MCP round trip", () => {
     mkdirSync(join(root, "posts"), { recursive: true });
     writeFileSync(
       join(root, "posts", "hello.md"),
-      `---\ntitle: Hello\nstatus: published\n---\n\n# Hello\n\nWorld.\n`,
+      `---\ntitle: Hello\nstatus: published\n---\n\n# Hello\n\nSee [peer](./peer.md).\n`,
+      "utf8",
+    );
+    writeFileSync(
+      join(root, "posts", "peer.md"),
+      `---\ntitle: Peer\nstatus: published\n---\n\nPeer body.\n`,
       "utf8",
     );
     writeFileSync(
@@ -54,13 +59,13 @@ describe("local + remote MCP round trip", () => {
     const hits = await local.query({
       query: `from docs where $path.startsWith("posts/") && status == "published"`,
     });
-    expect(hits).toHaveLength(1);
-    expect(hits[0]!.path).toBe("posts/hello.md");
+    expect(hits).toHaveLength(2);
 
     const docs = await local.hydrate({ ids: hits.map((h) => h.id) });
-    expect(docs).toHaveLength(1);
-    expect(docs[0]!.body).toContain("World.");
-    expect(docs[0]!.properties.frontmatter?.title).toBe("Hello");
+    expect(docs).toHaveLength(2);
+
+    const edges = await local.outEdges({ ids: hits.map((h) => h.id) });
+    expect(edges.some((e) => e.dstPath === "posts/peer.md")).toBe(true);
     local.close();
 
     const mcp = await createMcpHttpServer({
@@ -78,9 +83,11 @@ describe("local + remote MCP round trip", () => {
     const remoteHits = await remote.query({
       query: `from docs where status == "published"`,
     });
-    expect(remoteHits).toHaveLength(1);
+    expect(remoteHits).toHaveLength(2);
     const remoteDocs = await remote.hydrate({ ids: remoteHits.map((h) => h.id) });
-    expect(remoteDocs[0]!.body).toContain("World.");
+    expect(remoteDocs.some((d) => d.body.includes("Peer"))).toBe(true);
+    const remoteEdges = await remote.outEdges({ ids: remoteHits.map((h) => h.id) });
+    expect(remoteEdges.some((e) => e.dstPath === "posts/peer.md")).toBe(true);
 
     await remote.close();
     await mcp.close();
