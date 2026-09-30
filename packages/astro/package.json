@@ -4,6 +4,9 @@
   "description": "Astro Content Loader and helpers to use omgbase as a CMS",
   "type": "module",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=22"
   },
