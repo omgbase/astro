@@ -1,6 +1,6 @@
 {
   "name": "@omgbase/astro",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Astro Content Loader and helpers to use omgbase as a CMS",
   "type": "module",
   "license": "MIT",

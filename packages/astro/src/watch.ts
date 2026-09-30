@@ -373,6 +373,10 @@ export async function startWatch(
       meta.set(CURSOR_META, cursor);
     }
 
+    // The transport reconnects on a lost session, so a failed poll is a
+    // server that is down or restarting. Log the outage once, not every tick;
+    // the cursor is a server-side commit seq and stays valid across restarts.
+    let unreachable = false;
     const tick = async () => {
       if (busy || stopped || !transport.changesSince) return;
       try {
@@ -380,6 +384,10 @@ export async function startWatch(
           cursor: Number(cursor),
           ...(opts.repo !== undefined ? { repo: opts.repo } : {}),
         });
+        if (unreachable) {
+          unreachable = false;
+          logger.info("omgbase reachable again; resuming changes_since polling");
+        }
         if (page.digests.length === 0) {
           if (page.head !== Number(cursor)) {
             cursor = String(page.head);
@@ -391,8 +399,12 @@ export async function startWatch(
         meta.set(CURSOR_META, cursor);
         await reload(`changes_since → ${cursor}`);
       } catch (err) {
+        if (unreachable) return;
+        unreachable = true;
         logger.warn(
-          `omgbase changes_since poll failed: ${err instanceof Error ? err.message : String(err)}`,
+          `omgbase unreachable, retrying every ${intervalMs}ms: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
         );
       }
     };

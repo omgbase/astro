@@ -59,6 +59,35 @@ export interface RemoteTransportOptions {
   token?: string;
   /** Default repo slug passed to MCP tools when the call omits `repo`. */
   repo?: string;
+  /**
+   * Connection factory (defaults to `connectHttpEngine`). Exposed so tests can
+   * inject a fake client; production code never needs to set it.
+   */
+  connect?: (spec: {
+    url: string;
+    headers?: Record<string, string>;
+  }) => Promise<ToolClient>;
+}
+
+/** The slice of `McpEngineClient` the transport uses. */
+export type ToolClient = Pick<McpEngineClient, "callTool" | "close">;
+
+/**
+ * Does this error mean the MCP session/connection behind the client is gone,
+ * so a fresh connection (rather than the same request again) might succeed?
+ *
+ * Covers the Streamable HTTP "Session not found" (JSON-RPC -32001) a restarted
+ * server returns for a stale session id, plus connection-level failures.
+ */
+export function isConnectionLost(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/session not found/i.test(msg)) return true;
+  if (/-32001/.test(msg)) return true;
+  if (/\b(ECONNREFUSED|ECONNRESET|EPIPE|ETIMEDOUT|ENOTFOUND|EAI_AGAIN)\b/.test(msg)) return true;
+  if (/fetch failed|socket hang up/i.test(msg)) return true;
+  const code = (err as { code?: unknown } | null)?.code;
+  if (code === -32001) return true;
+  return typeof code === "string" && /^E(CONNREFUSED|CONNRESET|PIPE|TIMEDOUT|NOTFOUND|AI_AGAIN)$/.test(code);
 }
 
 interface QueryToolResult {
@@ -91,31 +120,62 @@ export class RemoteTransport implements Transport {
   private readonly url: string;
   private readonly headers: Record<string, string>;
   private readonly repo: string | undefined;
-  private client: McpEngineClient | null = null;
+  private readonly connect: NonNullable<RemoteTransportOptions["connect"]>;
+  private client: ToolClient | null = null;
 
   constructor(opts: RemoteTransportOptions) {
     this.url = opts.url;
     this.headers = resolveHeaders(opts);
     this.repo = opts.repo;
+    this.connect = opts.connect ?? connectHttpEngine;
   }
 
-  private async ensureClient(): Promise<McpEngineClient> {
+  private async ensureClient(): Promise<ToolClient> {
     if (this.client) return this.client;
-    this.client = await connectHttpEngine({
+    this.client = await this.connect({
       url: this.url,
       ...(Object.keys(this.headers).length > 0 ? { headers: this.headers } : {}),
     });
     return this.client;
   }
 
-  async query(opts: QueryOptions): Promise<QueryHit[]> {
+  /** Drop the cached client, closing it best-effort (it may already be dead). */
+  private async dropClient(): Promise<void> {
+    const client = this.client;
+    this.client = null;
+    if (!client) return;
+    try {
+      await client.close();
+    } catch {
+      // A dead session can't be closed cleanly; nothing to do.
+    }
+  }
+
+  /**
+   * Call a tool on the long-lived client. If the call fails because the
+   * session or connection is gone (server restarted, Streamable HTTP session
+   * expired), reconnect and retry exactly once. Any other error, and the
+   * retry's own error, propagate unchanged.
+   */
+  private async callTool<T>(name: string, args: Record<string, unknown>): Promise<T> {
     const client = await this.ensureClient();
+    try {
+      return await client.callTool<T>(name, args);
+    } catch (err) {
+      if (!isConnectionLost(err)) throw err;
+      await this.dropClient();
+      const fresh = await this.ensureClient();
+      return await fresh.callTool<T>(name, args);
+    }
+  }
+
+  async query(opts: QueryOptions): Promise<QueryHit[]> {
     const args: Record<string, unknown> = { query: opts.query };
     if (opts.limit !== undefined) args.limit = opts.limit;
     const repo = opts.repo ?? this.repo;
     if (repo !== undefined) args.repo = repo;
 
-    const result = await client.callTool<QueryToolResult>("query", args);
+    const result = await this.callTool<QueryToolResult>("query", args);
     if (result.consumer === "count" || result.consumer === "exists") {
       throw new Error(`omgLoader query must return document hits, got consumer=${result.consumer}`);
     }
@@ -126,7 +186,6 @@ export class RemoteTransport implements Transport {
   }
 
   async hydrate(opts: HydrateOptions): Promise<HydratedDoc[]> {
-    const client = await this.ensureClient();
     const repo = opts.repo ?? this.repo;
     const out: HydratedDoc[] = [];
 
@@ -134,7 +193,7 @@ export class RemoteTransport implements Transport {
       const chunk = opts.ids.slice(i, i + HYDRATE_CHUNK);
       const args: Record<string, unknown> = { docs: chunk };
       if (repo !== undefined) args.repo = repo;
-      const result = await client.callTool<DocsGetManyResult>("docs_get_many", args);
+      const result = await this.callTool<DocsGetManyResult>("docs_get_many", args);
       for (const item of result.items ?? []) {
         out.push({
           id: item.docId,
@@ -176,13 +235,12 @@ export class RemoteTransport implements Transport {
   }
 
   async changesSince(opts: ChangesSinceOptions = {}): Promise<ChangesPage> {
-    const client = await this.ensureClient();
     const args: Record<string, unknown> = {};
     if (opts.cursor !== undefined) args.cursor = opts.cursor;
     if (opts.limit !== undefined) args.limit = opts.limit;
     const repo = opts.repo ?? this.repo;
     if (repo !== undefined) args.repo = repo;
-    const page = await client.callTool<{
+    const page = await this.callTool<{
       digests: Array<{ seq: number; summary?: string }>;
       head: number;
       truncated: boolean;
@@ -195,10 +253,7 @@ export class RemoteTransport implements Transport {
   }
 
   async close(): Promise<void> {
-    if (this.client) {
-      await this.client.close();
-      this.client = null;
-    }
+    await this.dropClient();
   }
 }
 

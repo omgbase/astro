@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { syncEntries, stopWatch } from "./watch.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { startWatch, syncEntries, stopWatch } from "./watch.js";
 import type { HydratedDoc, Transport } from "./transport.js";
 import type { LoaderContext } from "astro/loaders";
 
@@ -11,12 +11,16 @@ type StoreEntry = {
   rendered?: { html: string };
 };
 
-function mockContext(): LoaderContext & { renders: string[] } {
+type Logged = { level: "info" | "warn" | "error"; msg: string };
+
+function mockContext(): LoaderContext & { renders: string[]; logged: Logged[] } {
   const entries = new Map<string, StoreEntry>();
   const meta = new Map<string, string>();
   const renders: string[] = [];
+  const logged: Logged[] = [];
   return {
     renders,
+    logged,
     collection: "posts",
     store: {
       get: (id: string) => entries.get(id),
@@ -45,9 +49,9 @@ function mockContext(): LoaderContext & { renders: string[] } {
       has: (k: string) => meta.has(k),
     },
     logger: {
-      info: () => undefined,
-      warn: () => undefined,
-      error: () => undefined,
+      info: (msg: string) => logged.push({ level: "info", msg }),
+      warn: (msg: string) => logged.push({ level: "warn", msg }),
+      error: (msg: string) => logged.push({ level: "error", msg }),
       debug: () => undefined,
       fork: () => undefined as never,
     } as never,
@@ -59,7 +63,7 @@ function mockContext(): LoaderContext & { renders: string[] } {
     },
     generateDigest: (data: string | Record<string, unknown>) =>
       typeof data === "string" ? `d:${data.length}` : `d:${Object.keys(data).length}`,
-  } as unknown as LoaderContext & { renders: string[] };
+  } as unknown as LoaderContext & { renders: string[]; logged: Logged[] };
 }
 
 const slug = ({ path }: { path: string }) => path.replace(/^posts\//, "").replace(/\.md$/, "");
@@ -324,5 +328,49 @@ describe("syncEntries", () => {
 describe("stopWatch", () => {
   it("is a no-op when nothing is watching", async () => {
     await expect(stopWatch("missing")).resolves.toBeUndefined();
+  });
+});
+
+describe("startWatch remote polling", () => {
+  afterEach(async () => {
+    await stopWatch("posts");
+    vi.useRealTimers();
+  });
+
+  /** A fake Vite watcher: enough of the FSWatcher surface for startWatch. */
+  const fakeWatcher = () =>
+    ({ add: () => undefined, on: () => undefined, off: () => undefined }) as never;
+
+  it("warns once while the server is unreachable and logs recovery once", async () => {
+    vi.useFakeTimers();
+    const { transport } = fakeOmg([doc("d_a", "posts/a.md", "A", "a")]);
+    let down = false;
+    transport.changesSince = vi.fn(async () => {
+      if (down) throw new Error("fetch failed");
+      return { digests: [], head: 7, truncated: false };
+    });
+    const ctx = mockContext();
+    ctx.watcher = fakeWatcher();
+    await startWatch(ctx, transport, {
+      query: "from docs",
+      slug,
+      href,
+      watch: { intervalMs: 100 },
+    });
+    ctx.logged.length = 0;
+
+    down = true;
+    for (let i = 0; i < 5; i += 1) await vi.advanceTimersByTimeAsync(100);
+    const warns = ctx.logged.filter((l) => l.level === "warn");
+    expect(warns).toHaveLength(1);
+    expect(warns[0]!.msg).toMatch(/unreachable, retrying every 100ms.*fetch failed/);
+
+    down = false;
+    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(ctx.logged.filter((l) => l.level === "warn")).toHaveLength(1);
+    const infos = ctx.logged.filter((l) => l.level === "info" && /reachable again/.test(l.msg));
+    expect(infos).toHaveLength(1);
+    expect(transport.changesSince).toHaveBeenCalledTimes(1 + 5 + 2);
   });
 });

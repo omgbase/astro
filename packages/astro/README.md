@@ -7,7 +7,7 @@ The package provides:
 - **`omgLoader`** — an Astro Content Layer loader driven by an **OQX** query
 - **Local transport** — embedded `@omgbase/core`
 - **Remote transport** — Streamable HTTP MCP (`query` + `docs_get_many`), same as `omg … --server <url>`
-- **Dev live-reload** — in `astro dev`, local vaults use Vite's FS watcher; remote polls MCP `changes_since`. Both update Astro's content data store so the normal HMR path fires — no custom integration required
+- **Dev live-reload** — in `astro dev`, local vaults use Vite's FS watcher; remote polls MCP `changes_since` and reconnects on its own when the server restarts. Both update Astro's content data store so the normal HMR path fires — no custom integration required
 - **`createMcpHttpServer`** — optional local Streamable HTTP MCP server for demos/CI
 
 ## Install
@@ -92,6 +92,8 @@ Enabled by default whenever Astro passes a `watcher` into the loader:
 | Remote | Poll MCP `changes_since` (default every 2s) |
 
 On change, the loader re-queries/hydrates into the content data store. Astro already watches that store file and hot-reloads pages — we don’t invent a second HMR channel.
+
+If the remote server restarts (or the Streamable HTTP session expires), the transport drops its stale session, reconnects, and retries the call once — polling resumes without restarting `astro dev`. While the server is down, the loader logs one warning and then a single info line when it comes back.
 
 ```ts
 omgLoader({

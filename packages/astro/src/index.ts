@@ -15,7 +15,7 @@ export {
   parseHeaderLine,
   resolveHeaders,
 } from "./remote.js";
-export type { RemoteTransportOptions } from "./remote.js";
+export type { RemoteTransportOptions, ToolClient } from "./remote.js";
 
 export type { WatchOption, SyncResult } from "./watch.js";
 export { withContentHash, encodeEntryDigest, parseEntryDigest } from "./digest.js";
