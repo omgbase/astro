@@ -71,6 +71,23 @@ export function mergeHitProjections(
 }
 
 /**
+ * Stable fingerprint for digest inputs. Order-insensitive for plain objects so
+ * frontmatter key reshuffles don't thrash the content store.
+ */
+export function digestFingerprint(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "undefined";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => digestFingerprint(item)).join(",")}]`;
+  }
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${digestFingerprint(v)}`).join(",")}}`;
+}
+
+/**
  * Map a hydrated omg doc to Astro entry fields.
  * Frontmatter keys are spread into `data`; intrinsic keys are always set.
  * When frontmatter has no `title`, computed `$title` is used.
@@ -89,7 +106,16 @@ export function mapDoc(
     docId: doc.id,
     properties: doc.properties,
   });
-  const digest = doc.contentHash ?? `body:${doc.body.length}`;
+  // Digest must change for path moves, rev bumps, and frontmatter-only edits.
+  // `$content_hash` is often absent remotely; falling back to body length alone
+  // would skip status/priority/etc. updates in Astro's content store.
+  const contentDigest = doc.contentHash ?? `body:${doc.body.length}`;
+  const digest = [
+    contentDigest,
+    `path:${doc.path}`,
+    `rev:${doc.rev ?? ""}`,
+    `fm:${digestFingerprint(frontmatter)}`,
+  ].join("|");
   return {
     id: doc.id,
     data: {

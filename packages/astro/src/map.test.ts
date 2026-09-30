@@ -50,7 +50,8 @@ describe("mapDoc", () => {
       contentHash: "deadbeef",
       slug: "posts/hello",
     });
-    expect(mapped.digest).toBe("deadbeef");
+    expect(mapped.digest).toContain("deadbeef|path:posts/hello.md|rev:r_1|fm:");
+    expect(mapped.digest).toContain('"status":"published"');
   });
 
   it("falls back to computed $title when frontmatter has none", () => {
@@ -66,6 +67,56 @@ describe("mapDoc", () => {
       rev: null,
     };
     expect(mapDoc(doc).data.title).toBe("Foo");
+  });
+
+  it("changes digest when path changes but content hash does not", () => {
+    const base = {
+      id: "d_1",
+      properties: { frontmatter: {}, computed: { $content_hash: "abc" } },
+      body: "hi\n",
+      contentHash: "abc",
+      rev: "r_1",
+    } satisfies Omit<HydratedDoc, "path">;
+    const a = mapDoc({ ...base, path: "concepts/attn.md" });
+    const b = mapDoc({ ...base, path: "projects/attn.md" });
+    expect(a.digest).not.toBe(b.digest);
+    expect(b.data.slug).toBe("projects/attn");
+  });
+
+  it("changes digest when frontmatter changes but body hash/length do not", () => {
+    const base = {
+      id: "d_1",
+      path: "projects/attn.md",
+      body: "# attn\n",
+      contentHash: null,
+      rev: "r_1",
+    } satisfies Omit<HydratedDoc, "properties">;
+    const before = mapDoc({
+      ...base,
+      properties: { frontmatter: { layer: "working" }, computed: {} },
+    });
+    const after = mapDoc({
+      ...base,
+      properties: {
+        frontmatter: { layer: "working", status: "active" },
+        computed: {},
+      },
+    });
+    expect(before.digest).not.toBe(after.digest);
+    expect(after.data.status).toBe("active");
+  });
+
+  it("changes digest when rev changes", () => {
+    const base = {
+      id: "d_1",
+      path: "projects/attn.md",
+      properties: { frontmatter: { status: "active" }, computed: {} },
+      body: "# attn\n",
+      contentHash: null,
+    } satisfies Omit<HydratedDoc, "rev">;
+    const a = mapDoc({ ...base, rev: "r_1" });
+    const b = mapDoc({ ...base, rev: "r_2" });
+    expect(a.digest).not.toBe(b.digest);
   });
 });
 
