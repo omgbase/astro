@@ -124,7 +124,9 @@ Prefer your real wrapper/hosted endpoint for production builds.
 - Astro entry **`id`** = omg document id (`d_…`)
 - **`data.slug`** = routing key (default: path with `.md` stripped; override with `slug`)
 - **`href`** = site URL used when rewriting markdown links between hydrated docs (default `/${slug}`; override to match routes)
-- Digests use omg `contentHash` (plus an href-map fingerprint when rewriting) so unchanged docs skip rewrite on reload
+- **Hash-first sync.** Every load projects `$content_hash` onto your query, so a hit carries the server's whole-file hash (frontmatter included). Docs whose hash, path and hit projections match the stored entry are reused without `docs_get_many`; only new/changed docs are fetched, mapped and rendered. A no-change reload costs one query and nothing else — an all-docs collection is cheap to keep loaded
+- **Link-aware invalidation.** Each entry's digest also pins the hrefs of the docs it links to (via omg out-edges). Adding, removing or moving a doc re-fetches only its linkers, not the whole collection. The edge scan itself is skipped when nothing changed
+- **Fallbacks.** If the server rejects the `$content_hash` projection (older omg), the loader warns once and hydrates everything as before; the digest compare still avoids redundant re-renders. Entries stored under the pre-0.2 digest format are re-hydrated once and migrated
 
 ## Example
 

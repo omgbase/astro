@@ -17,7 +17,9 @@ export {
 } from "./remote.js";
 export type { RemoteTransportOptions } from "./remote.js";
 
-export type { WatchOption } from "./watch.js";
+export type { WatchOption, SyncResult } from "./watch.js";
+export { withContentHash, encodeEntryDigest, parseEntryDigest } from "./digest.js";
+export type { EntryDigest } from "./digest.js";
 
 export { defaultSlug, stripFrontmatter, mapDoc, mergeHitProjections, contentHashOf } from "./map.js";
 export type { SlugContext, MappedEntry } from "./map.js";

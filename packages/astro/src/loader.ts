@@ -120,8 +120,10 @@ export function omgLoader(opts: OmgLoaderOptions): Loader {
 
       try {
         context.logger.info(`querying omgbase (${transport.kind})`);
-        const { seen } = await syncEntries(context, transport, syncOpts);
-        context.logger.info(`loaded ${seen} entries from omgbase`);
+        const { seen, hydrated, written } = await syncEntries(context, transport, syncOpts);
+        context.logger.info(
+          `loaded ${seen} entries from omgbase (${hydrated} fetched, ${written} updated)`,
+        );
 
         if (context.watcher && watchOpt !== false) {
           await startWatch(context, transport, { ...syncOpts, watch: watchOpt });
