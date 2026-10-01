@@ -5,6 +5,7 @@ Use an [omgbase](https://github.com/omgbase/omgbase) repository as the CMS for a
 The package provides:
 
 - **`omgLoader`** — an Astro Content Layer loader driven by an **OQX** query
+- **`omgLiveLoader`** — an Astro **live collection** loader for SSR: query and hydrate omg at request time, no build-time data store
 - **Local transport** — embedded `@omgbase/core`
 - **Remote transport** — Streamable HTTP MCP (`query` + `docs_get_many`), same as `omg … --server <url>`
 - **Dev live-reload** — in `astro dev`, local vaults use Vite's FS watcher; remote polls MCP `changes_since` and reconnects on its own when the server restarts. Both update Astro's content data store so the normal HMR path fires — no custom integration required
@@ -120,6 +121,94 @@ const mcp = await createMcpHttpServer({
 ```
 
 Prefer your real wrapper/hosted endpoint for production builds.
+
+## Live collections (SSR)
+
+`omgLiveLoader` is an Astro [live collection](https://docs.astro.build/en/guides/content-collections/) loader (experimental in Astro 5.10+, stable in Astro 7). Nothing is loaded at build time: every `getLiveCollection` / `getLiveEntry` call runs an OQX query and/or `docs_get_many` against omg when the request comes in. Your site must render on the server (`output: "server"` in `astro.config.mjs`, with an adapter).
+
+```ts
+// src/live.config.ts
+import { defineLiveCollection } from "astro:content";
+import { omgLiveLoader } from "@omgbase/astro";
+
+const notes = defineLiveCollection({
+  loader: omgLiveLoader({
+    url: process.env.OMG_URL!,            // or `workspace: "../content"` for the local transport
+    token: process.env.OMG_TOKEN,
+    repo: "notes",
+    query: "select $path, $title, $updated_at from docs",
+    href: ({ slug }) => `/note/${slug}/`, // match your routes
+  }),
+});
+
+export const collections = { notes };
+```
+
+```astro
+---
+// src/pages/notes/index.astro
+import { getLiveCollection } from "astro:content";
+
+const { entries, error } = await getLiveCollection("notes", {
+  query: 'select $path, $title, $updated_at from docs where status == "published"',
+  limit: 50,
+});
+if (error) throw error;
+---
+<ul>
+  {entries.map((n) => <li><a href={`/note/${n.data.slug}/`}>{n.data.title}</a></li>)}
+</ul>
+```
+
+```astro
+---
+// src/pages/note/[...slug].astro
+import { getLiveEntry, render } from "astro:content";
+
+const { entry, error } = await getLiveEntry("notes", { slug: Astro.params.slug! });
+if (error) throw error;
+if (!entry) return Astro.redirect("/404");
+const { Content } = await render(entry);
+---
+<h1>{entry.data.title}</h1>
+<Content />
+```
+
+### Filters
+
+| Call | Filter | Notes |
+| --- | --- | --- |
+| `getLiveCollection(name, filter?)` | `{ query?, limit?, hydrate? }` | Each field falls back to the loader option. `query` must return document hits |
+| `getLiveEntry(name, filter)` | `{ id }` **or** `{ path }` **or** `{ slug }` | Exactly one key. `path` is repo-relative (a leading `/` is stripped); `slug` is mapped back to a path with `pathForSlug` (default `` `${slug}.md` ``) and looked up via `$path == "…"` |
+
+A missing entry resolves to `entry: undefined`; every other failure comes back as `error`, an `OmgLiveError` with a `code` of `invalid_filter`, `query_failed`, `hydrate_failed` or `render_failed` — the loader never throws.
+
+### Lean vs hydrated
+
+By default a collection is **lean**: one `query` call, and each entry's `data` holds the query's projections (plus `path`, `docId`, `slug`, and `updatedAt` / `title` aliases of `$updated_at` / `$title` when projected). There is no `rendered` content and no `body`, so a list page costs a single round trip.
+
+`getLiveEntry` always **hydrates**: `docs_get_many` for the doc, `data` = frontmatter + intrinsics (`path`, `docId`, `slug`, `contentHash`) + the lean projections + `body` (markdown after frontmatter), and `rendered.html`. Markdown links are rewritten to `href(...)` for the docs omg's out-edges say this doc links to; links to anything else are left as authored. Set `href: false` to skip rewriting.
+
+Pass `hydrate: true` (loader option or collection filter) to get the hydrated shape for every collection entry — one `query`, one `docs_get_many`, one edge lookup.
+
+`cacheHint.lastModified` is set from `$updated_at` (the newest hit for a collection) whenever your query projects it, so project it if you cache responses.
+
+### Rendering
+
+Bodies render through `@astrojs/markdown-remark`'s `createMarkdownProcessor`, created once per loader. Pass `markdown` to configure it, or `render` to replace it:
+
+```ts
+omgLiveLoader({
+  url: process.env.OMG_URL!,
+  query: "select $path, $title, $updated_at from docs",
+  markdown: { shikiConfig: { theme: "github-dark" } },
+  // render: async (markdown, { docId, path }) => ({ html: myRenderer(markdown) }),
+});
+```
+
+### Connections
+
+The loader connects lazily on the first request and keeps that transport for the life of the server process; the remote transport reconnects by itself when the MCP session is lost. Pass `transport` to share a connection between loaders or to inject a fake in tests.
 
 ## Identity & caching
 

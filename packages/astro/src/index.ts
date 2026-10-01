@@ -4,8 +4,20 @@ export type {
   OmgLoaderBaseOptions,
   OmgLoaderLocalOptions,
   OmgLoaderRemoteOptions,
+  TransportOptions,
 } from "./loader.js";
 
+export { omgLiveLoader, OmgLiveError } from "./live.js";
+export type {
+  OmgLiveLoaderOptions,
+  OmgLiveCollectionFilter,
+  OmgLiveEntryFilter,
+  OmgLiveEntryData,
+  OmgLiveErrorCode,
+  OmgLiveLoader,
+} from "./live.js";
+
+export { outEdgesQuery } from "./transport.js";
 export type { Transport, QueryHit, HydratedDoc, QueryOptions, HydrateOptions, DocOutEdge } from "./transport.js";
 export { createLocalTransport, LocalTransport } from "./local.js";
 export type { LocalTransportOptions } from "./local.js";

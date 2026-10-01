@@ -61,9 +61,25 @@ export type OmgLoaderRemoteOptions = OmgLoaderBaseOptions & {
 
 export type OmgLoaderOptions = OmgLoaderLocalOptions | OmgLoaderRemoteOptions | OmgLoaderBaseOptions;
 
-function resolveTransport(opts: OmgLoaderOptions): Transport {
+/** The connection-related subset of loader options shared by `omgLoader` and `omgLiveLoader`. */
+export interface TransportOptions {
+  url?: string | undefined;
+  token?: string | undefined;
+  headers?: Record<string, string> | undefined;
+  headerLines?: string[] | undefined;
+  workspace?: string | undefined;
+  stale?: boolean | undefined;
+  repo?: string | undefined;
+  transport?: Transport | undefined;
+}
+
+/**
+ * Pick the transport for a loader: an explicit `transport`, else remote when
+ * `url` is set, else local when `workspace` is set.
+ */
+export function resolveTransport(opts: TransportOptions, who = "omgLoader"): Transport {
   if (opts.transport) return opts.transport;
-  if ("url" in opts && opts.url) {
+  if (opts.url) {
     const remote: RemoteTransportOptions = {
       url: opts.url,
       ...(opts.token !== undefined ? { token: opts.token } : {}),
@@ -73,7 +89,7 @@ function resolveTransport(opts: OmgLoaderOptions): Transport {
     };
     return createRemoteTransport(remote);
   }
-  if ("workspace" in opts && opts.workspace) {
+  if (opts.workspace) {
     const local: LocalTransportOptions = {
       workspace: opts.workspace,
       ...(opts.repo !== undefined ? { repo: opts.repo } : {}),
@@ -82,7 +98,7 @@ function resolveTransport(opts: OmgLoaderOptions): Transport {
     return createLocalTransport(local);
   }
   throw new Error(
-    "omgLoader requires either `workspace` (local) or `url` (Streamable HTTP MCP), or an explicit `transport`",
+    `${who} requires either \`workspace\` (local) or \`url\` (Streamable HTTP MCP), or an explicit \`transport\``,
   );
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@omgbase/astro",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Astro Content Loader and helpers to use omgbase as a CMS",
   "type": "module",
   "license": "MIT",
@@ -33,6 +33,7 @@
     "lint": "echo 'no lint yet'"
   },
   "dependencies": {
+    "@astrojs/markdown-remark": "^7.3.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@omgbase/core": "^0.5.0",
     "@omgbase/sync": "^0.4.2"

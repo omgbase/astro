@@ -58,6 +58,27 @@ export interface OutEdgesOptions {
 }
 
 /**
+ * Largest source-id set for which {@link outEdgesQuery} filters by `$src` in
+ * OQX instead of scanning every document edge in the repo. A request-time
+ * loader asks for one doc's edges; the build-time loader asks for a whole
+ * collection's, where the repo-wide scan is the cheaper shape.
+ */
+export const OUT_EDGES_PREDICATE_MAX_IDS = 25;
+
+/**
+ * OQX for the document out-edges of `ids`. OQX has no list literals, so small
+ * id sets become an `||` chain of `$src == "…"` tests; larger sets fall back to
+ * the repo-wide edge scan and are filtered client-side by the transport.
+ */
+export function outEdgesQuery(ids: string[]): string {
+  const base = `select $src, $dst, $dst_path from edges where dst_kind == "document"`;
+  const unique = [...new Set(ids)];
+  if (unique.length === 0 || unique.length > OUT_EDGES_PREDICATE_MAX_IDS) return base;
+  const predicate = unique.map((id) => `$src == ${JSON.stringify(id)}`).join(" || ");
+  return `${base} && (${predicate})`;
+}
+
+/**
  * Transport seam: local `@omgbase/core` or remote Streamable HTTP MCP.
  * Both paths share query → hydrate; optional `changesSince` enables remote watch.
  */

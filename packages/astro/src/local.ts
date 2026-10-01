@@ -9,16 +9,17 @@ import {
   type Store,
   type RepoRow,
 } from "@omgbase/core";
-import type {
-  ChangesPage,
-  ChangesSinceOptions,
-  DocOutEdge,
-  HydrateOptions,
-  HydratedDoc,
-  OutEdgesOptions,
-  QueryHit,
-  QueryOptions,
-  Transport,
+import {
+  outEdgesQuery,
+  type ChangesPage,
+  type ChangesSinceOptions,
+  type DocOutEdge,
+  type HydrateOptions,
+  type HydratedDoc,
+  type OutEdgesOptions,
+  type QueryHit,
+  type QueryOptions,
+  type Transport,
 } from "./transport.js";
 import { contentHashOf, stripFrontmatter } from "./map.js";
 
@@ -138,11 +139,7 @@ export class LocalTransport implements Transport {
     this.ensureFresh();
     if (opts.ids.length === 0) return [];
     const wanted = new Set(opts.ids);
-    const result = oqxRun(
-      this.ws.store,
-      this.repo.repoId,
-      `$src, $dst, $dst_path from edges where dst_kind == "document"`,
-    );
+    const result = oqxRun(this.ws.store, this.repo.repoId, outEdgesQuery(opts.ids));
     const out: DocOutEdge[] = [];
     const seen = new Set<string>();
     for (const h of result.hits) {

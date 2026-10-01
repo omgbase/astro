@@ -1,14 +1,15 @@
 import { connectHttpEngine, type McpEngineClient } from "@omgbase/sync";
-import type {
-  ChangesPage,
-  ChangesSinceOptions,
-  DocOutEdge,
-  HydrateOptions,
-  HydratedDoc,
-  OutEdgesOptions,
-  QueryHit,
-  QueryOptions,
-  Transport,
+import {
+  outEdgesQuery,
+  type ChangesPage,
+  type ChangesSinceOptions,
+  type DocOutEdge,
+  type HydrateOptions,
+  type HydratedDoc,
+  type OutEdgesOptions,
+  type QueryHit,
+  type QueryOptions,
+  type Transport,
 } from "./transport.js";
 import { contentHashOf, stripFrontmatter } from "./map.js";
 
@@ -212,7 +213,7 @@ export class RemoteTransport implements Transport {
     if (opts.ids.length === 0) return [];
     const wanted = new Set(opts.ids);
     const hits = await this.query({
-      query: `$src, $dst, $dst_path from edges where dst_kind == "document"`,
+      query: outEdgesQuery(opts.ids),
       ...(opts.repo !== undefined ? { repo: opts.repo } : {}),
     });
     const out: DocOutEdge[] = [];
